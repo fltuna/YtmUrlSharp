@@ -190,6 +190,12 @@ public sealed class VROverlayManager : IDisposable
             case OverlayRenderer.HitResult.Row:
                 HandleRowSelect(state, rowIndex);
                 break;
+
+            case OverlayRenderer.HitResult.AutoStart:
+                StartupManager.Toggle();
+                state.AutoStartEnabled = StartupManager.IsRegistered;
+                state.NeedsRedraw = true;
+                break;
         }
     }
 

@@ -76,6 +76,9 @@ public sealed class AppState
     public int HistoryScrollOffset { get; set; }
     public int HistorySelectedIndex { get; set; } = -1;
 
+    // Startup setting
+    public bool AutoStartEnabled { get; set; } = StartupManager.IsRegistered;
+
     // Stream type filters (true = visible)
     public bool ShowYtDlp { get; set; } = true;
     public bool ShowMuxed { get; set; } = true;

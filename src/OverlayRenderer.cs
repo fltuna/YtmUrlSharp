@@ -466,6 +466,10 @@ public sealed class OverlayRenderer : IDisposable
             var info = $"{scrollOffset + 1}-{Math.Min(scrollOffset + MaxVisibleRows, itemCount)} / {itemCount}";
             canvas.DrawText(info, Width - Padding - 120, ScrollBtnY + 24, pageFont, pagePaint);
         }
+
+        // Auto-start checkbox
+        using var startupFont = new SKFont(Typeface, 11) { Edging = SKFontEdging.SubpixelAntialias };
+        DrawCheckbox(canvas, Width - Padding - 120, Height - FooterHeight + 40, "Auto Start", state.AutoStartEnabled, startupFont);
     }
 
     private static void DrawScrollButton(SKCanvas canvas, int x, int y, string text, bool enabled)
@@ -482,7 +486,7 @@ public sealed class OverlayRenderer : IDisposable
         canvas.DrawText(text, x + (ScrollBtnWidth - textWidth) / 2f, y + 24, font, textPaint);
     }
 
-    public enum HitResult { None, Row, CopyButton, ScrollUp, ScrollDown, TabStreams, TabHistory, Filter }
+    public enum HitResult { None, Row, CopyButton, ScrollUp, ScrollDown, TabStreams, TabHistory, Filter, AutoStart }
 
     /// <summary>
     /// Hit test. Returns the hit result and associated index.
@@ -509,6 +513,13 @@ public sealed class OverlayRenderer : IDisposable
                     return (HitResult.Filter, i);
             }
         }
+
+        // Auto-start checkbox hit test
+        var autoStartX = Width - Padding - 120;
+        var autoStartY = Height - FooterHeight + 40;
+        if (x >= autoStartX && x <= autoStartX + CheckboxSize + 70
+            && y >= autoStartY && y <= autoStartY + CheckboxSize)
+            return (HitResult.AutoStart, -1);
 
         // Scroll button hit test
         if (y >= ScrollBtnY && y <= ScrollBtnY + ScrollBtnHeight)

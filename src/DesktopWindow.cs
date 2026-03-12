@@ -114,6 +114,12 @@ public sealed class DesktopWindow : Form
             case OverlayRenderer.HitResult.Row:
                 HandleRowSelect(rowIndex);
                 break;
+
+            case OverlayRenderer.HitResult.AutoStart:
+                StartupManager.Toggle();
+                _state.AutoStartEnabled = StartupManager.IsRegistered;
+                _state.NeedsRedraw = true;
+                break;
         }
     }
 
