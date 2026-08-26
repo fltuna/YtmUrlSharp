@@ -15,8 +15,15 @@ public sealed class AppState
     public bool NeedsRedraw { get; set; } = true;
     public string? CopiedUrl { get; set; }
     public DateTime? CopiedAt { get; set; }
-    public YtDlpStatus YtDlpState { get; set; } = YtDlpStatus.Unknown;
+    public ToolStatus YtDlpState { get; set; } = ToolStatus.Unknown;
     public int YtDlpDownloadPercent { get; set; }
+
+    /// <summary>
+    /// yt-dlp cannot solve YouTube's nsig challenge without a JavaScript engine, so deno's
+    /// state is part of whether extraction actually works — not a separate nicety.
+    /// </summary>
+    public ToolStatus DenoState { get; set; } = ToolStatus.Unknown;
+    public int DenoDownloadPercent { get; set; }
 
     private const int MaxHistoryEntries = 50;
 
@@ -90,7 +97,7 @@ public sealed class AppState
     /// </summary>
     public List<StreamEntry> FilteredStreams => Streams.Where(s => s.Type switch
     {
-        "yt-video" or "yt-audio" => ShowYtDlp,
+        "yt-video" or "yt-audio" or "yt-muxed" => ShowYtDlp,
         "muxed" => ShowMuxed,
         "video" => ShowVideo,
         "audio" => ShowAudio,
@@ -100,7 +107,8 @@ public sealed class AppState
 
 public enum ViewTab { Streams, History }
 
-public enum YtDlpStatus
+/// <summary>Acquisition state of an external tool binary (yt-dlp, deno).</summary>
+public enum ToolStatus
 {
     Unknown,
     Present,
@@ -129,5 +137,5 @@ public sealed class StreamEntry
     public required string Codec { get; init; }
     public required string Url { get; init; }
     public required long? Size { get; init; }
-    public required string Type { get; init; } // "yt-video", "yt-audio", "dash", "hls", "video", "audio", "muxed"
+    public required string Type { get; init; } // "yt-video", "yt-audio", "yt-muxed", "dash", "hls", "video", "audio", "muxed"
 }

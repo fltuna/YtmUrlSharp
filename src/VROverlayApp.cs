@@ -22,6 +22,8 @@ public sealed class VROverlayManager : IDisposable
     private Application? _vrApp;
     private Overlay? _overlay;
 
+    public event Action<int>? ReloadRequested;
+
     public bool IsConnected => _vrApp != null;
 
     public VROverlayManager(OverlayRenderer renderer, ILoggerFactory loggerFactory)
@@ -185,6 +187,10 @@ public sealed class VROverlayManager : IDisposable
 
             case OverlayRenderer.HitResult.CopyButton:
                 HandleAction(state, rowIndex);
+                break;
+
+            case OverlayRenderer.HitResult.ReloadButton:
+                ReloadRequested?.Invoke(rowIndex);
                 break;
 
             case OverlayRenderer.HitResult.Row:

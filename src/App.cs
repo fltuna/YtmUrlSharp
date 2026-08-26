@@ -41,6 +41,8 @@ public sealed class App : IDisposable
         _timer = new System.Windows.Forms.Timer { Interval = 33 };
         _timer.Tick += OnTick;
         _clipboardWatcher.YouTubeUrlDetected += OnClipboardYouTubeUrl;
+        _window.ReloadRequested += OnReloadHistory;
+        _vrManager.ReloadRequested += OnReloadHistory;
     }
 
     public void Run(CancellationToken ct)
@@ -51,8 +53,8 @@ public sealed class App : IDisposable
         _logger.LogInformation("Monitoring clipboard and VRChat logs for YouTube URLs...");
         _logger.LogInformation("SteamVR overlay will activate automatically when SteamVR starts.");
 
-        // Check yt-dlp availability at startup (non-blocking)
-        _ = CheckYtDlpAsync(ct);
+        // Check external tool availability at startup (non-blocking)
+        _ = CheckToolsAsync(ct);
 
         _state.StatusMessage = "Waiting for YouTube URL in clipboard...";
         _state.NeedsRedraw = true;
@@ -104,6 +106,24 @@ public sealed class App : IDisposable
     {
         if (_ct.IsCancellationRequested) return;
         if (_activeTasks.ContainsKey(url) || url == _state.DetectedYouTubeUrl) return;
+        await HandleNewYouTubeUrl(url);
+    }
+
+    private async void OnReloadHistory(int historyIndex)
+    {
+        if (_ct.IsCancellationRequested) return;
+        if (historyIndex < 0 || historyIndex >= _state.History.Count) return;
+
+        var url = _state.History[historyIndex].YoutubeUrl;
+        _logger.LogInformation("Reloading: {Url}", url);
+
+        // Remove from active tasks if exists so it can be reprocessed
+        if (_activeTasks.TryRemove(url, out var oldCts))
+        {
+            oldCts.Cancel();
+            oldCts.Dispose();
+        }
+
         await HandleNewYouTubeUrl(url);
     }
 
@@ -175,15 +195,27 @@ public sealed class App : IDisposable
         }
     }
 
-    private async Task CheckYtDlpAsync(CancellationToken ct)
+    /// <summary>
+    /// Resolves both external tools up front so the first URL does not pay for a download.
+    /// deno is not optional extra credit: yt-dlp needs a JavaScript engine to solve YouTube's
+    /// nsig challenge, and without one the URLs it returns are rejected with HTTP 403.
+    /// </summary>
+    private async Task CheckToolsAsync(CancellationToken ct)
     {
-        try
+        var ytDlp = ResolveAsync("yt-dlp", () => _youtubeProcessor.YtDlpProvider.GetPathAsync(ct));
+        var deno = ResolveAsync("deno", () => _youtubeProcessor.DenoProvider.GetPathAsync(ct));
+        await Task.WhenAll(ytDlp, deno);
+
+        async Task ResolveAsync(string name, Func<Task<string?>> resolve)
         {
-            await _youtubeProcessor.YtDlpProvider.GetPathAsync(ct);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            _logger.LogWarning("yt-dlp startup check failed: {Message}", ex.Message);
+            try
+            {
+                await resolve();
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogWarning("{Tool} startup check failed: {Message}", name, ex.Message);
+            }
         }
     }
 

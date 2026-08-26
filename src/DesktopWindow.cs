@@ -13,6 +13,11 @@ public sealed class DesktopWindow : Form
     private readonly AppState _state;
     private Bitmap? _backBuffer;
 
+    /// <summary>
+    /// Fired when the user clicks RELOAD on a history entry. Parameter is the history index.
+    /// </summary>
+    public event Action<int>? ReloadRequested;
+
     public DesktopWindow(OverlayRenderer renderer, AppState state)
     {
         _renderer = renderer;
@@ -109,6 +114,10 @@ public sealed class DesktopWindow : Form
 
             case OverlayRenderer.HitResult.CopyButton:
                 HandleAction(rowIndex);
+                break;
+
+            case OverlayRenderer.HitResult.ReloadButton:
+                ReloadRequested?.Invoke(rowIndex);
                 break;
 
             case OverlayRenderer.HitResult.Row:

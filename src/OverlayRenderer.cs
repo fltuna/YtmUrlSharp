@@ -171,18 +171,46 @@ public sealed class OverlayRenderer : IDisposable
         canvas.DrawText(text, x + (TabWidth - textWidth) / 2f, y + 18, font, textPaint);
     }
 
-    private static void DrawYtDlpBadge(SKCanvas canvas, AppState state)
+    /// <summary>
+    /// Reports the state of the whole extraction toolchain, not yt-dlp alone. Without deno,
+    /// yt-dlp cannot solve YouTube's nsig challenge and returns URLs that answer 403, so a
+    /// bare "yt-dlp: ready" would tell the user the opposite of the truth.
+    /// </summary>
+    private static (string? Text, SKColor Color) DescribeToolchain(AppState state)
     {
-        var (text, color) = state.YtDlpState switch
+        // A broken or in-flight deno outranks yt-dlp's own state: it decides whether the
+        // URLs yt-dlp produces are usable at all.
+        switch (state.DenoState)
         {
-            YtDlpStatus.Present => ("yt-dlp: ready", SuccessColor),
-            YtDlpStatus.Checking => ("yt-dlp: checking...", ProcessingColor),
-            YtDlpStatus.Downloading => ($"yt-dlp: downloading {state.YtDlpDownloadPercent}%", ProcessingColor),
-            YtDlpStatus.Downloaded => ("yt-dlp: updated", SuccessColor),
-            YtDlpStatus.NotFound => ("yt-dlp: not found", ErrorColor),
-            YtDlpStatus.Failed => ("yt-dlp: download failed", ErrorColor),
+            case ToolStatus.Downloading:
+                return ($"deno: downloading {state.DenoDownloadPercent}%", ProcessingColor);
+            case ToolStatus.NotFound:
+            case ToolStatus.Failed:
+                return ("deno: missing — yt-dlp URLs will 403", ErrorColor);
+        }
+
+        var ytDlpReady = state.YtDlpState is ToolStatus.Present or ToolStatus.Downloaded;
+        var denoReady = state.DenoState is ToolStatus.Present or ToolStatus.Downloaded;
+
+        if (ytDlpReady && denoReady)
+            return ("yt-dlp + deno: ready", SuccessColor);
+
+        if (ytDlpReady)
+            return ("deno: checking...", ProcessingColor);
+
+        return state.YtDlpState switch
+        {
+            ToolStatus.Checking => ("yt-dlp: checking...", ProcessingColor),
+            ToolStatus.Downloading => ($"yt-dlp: downloading {state.YtDlpDownloadPercent}%", ProcessingColor),
+            ToolStatus.NotFound => ("yt-dlp: not found", ErrorColor),
+            ToolStatus.Failed => ("yt-dlp: download failed", ErrorColor),
             _ => (null, SubTextColor),
         };
+    }
+
+    private static void DrawYtDlpBadge(SKCanvas canvas, AppState state)
+    {
+        var (text, color) = DescribeToolchain(state);
 
         if (text == null) return;
 
@@ -389,6 +417,13 @@ public sealed class OverlayRenderer : IDisposable
             using var timeFont = new SKFont(Typeface, 12) { Edging = SKFontEdging.SubpixelAntialias };
             canvas.DrawText(timeText, 720, rowY + 24, timeFont, timePaint);
 
+            // Reload button
+            using var reloadBtnPaint = new SKPaint { Color = ProcessingColor.WithAlpha(60) };
+            canvas.DrawRoundRect(Width - 204, rowY + 6, 80, 28, 4, 4, reloadBtnPaint);
+            using var reloadTextPaint = new SKPaint { Color = ProcessingColor, IsAntialias = true };
+            using var reloadFont = new SKFont(Typeface, 12) { Edging = SKFontEdging.SubpixelAntialias };
+            canvas.DrawText("RELOAD", Width - 190, rowY + 24, reloadFont, reloadTextPaint);
+
             // Open button
             using var btnPaint = new SKPaint { Color = AccentColor.WithAlpha(60) };
             canvas.DrawRoundRect(Width - 116, rowY + 6, 80, 28, 4, 4, btnPaint);
@@ -404,6 +439,7 @@ public sealed class OverlayRenderer : IDisposable
         {
             "yt-video" => (HlsBadgeColor, "YT-DL"),
             "yt-audio" => (HlsBadgeColor, "YT-DL"),
+            "yt-muxed" => (MuxedBadgeColor, "YT-MUX"),
             "dash" => (DashBadgeColor, "DASH"),
             "hls" => (HlsBadgeColor, "HLS"),
             "video" => (VideoBadgeColor, "VIDEO"),
@@ -486,7 +522,7 @@ public sealed class OverlayRenderer : IDisposable
         canvas.DrawText(text, x + (ScrollBtnWidth - textWidth) / 2f, y + 24, font, textPaint);
     }
 
-    public enum HitResult { None, Row, CopyButton, ScrollUp, ScrollDown, TabStreams, TabHistory, Filter, AutoStart }
+    public enum HitResult { None, Row, CopyButton, ReloadButton, ScrollUp, ScrollDown, TabStreams, TabHistory, Filter, AutoStart }
 
     /// <summary>
     /// Hit test. Returns the hit result and associated index.
@@ -538,8 +574,11 @@ public sealed class OverlayRenderer : IDisposable
 
         var rowIndex = (int)((y - listStartY) / RowHeight) + scrollOffset;
         var isCopy = x >= Width - 116 && x <= Width - 36;
+        var isReload = x >= Width - 204 && x <= Width - 124;
 
-        return (isCopy ? HitResult.CopyButton : HitResult.Row, rowIndex);
+        if (isCopy) return (HitResult.CopyButton, rowIndex);
+        if (isReload && activeTab == ViewTab.History) return (HitResult.ReloadButton, rowIndex);
+        return (HitResult.Row, rowIndex);
     }
 
     private static string TruncateText(string text, SKFont font, float maxWidth)

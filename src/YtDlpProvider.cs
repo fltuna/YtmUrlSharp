@@ -18,6 +18,9 @@ public sealed class YtDlpProvider
 
     private static readonly string LocalBinaryPath = Path.Combine(DataDir, "yt-dlp.exe");
 
+    /// <summary>Kept inside our data directory so yt-dlp never writes to the user profile.</summary>
+    public static string CacheDir => Path.Combine(DataDir, "cache", "yt-dlp");
+
     private readonly ILogger<YtDlpProvider> _logger;
     private readonly AppState _state;
     private string? _resolvedPath;
@@ -43,19 +46,19 @@ public sealed class YtDlpProvider
         {
             _logger.LogInformation("yt-dlp found on PATH");
             _resolvedPath = onPath;
-            SetStatus(YtDlpStatus.Present);
+            SetStatus(ToolStatus.Present);
             return _resolvedPath;
         }
 
         // 2. Check local cache — verify hash against latest release
         if (File.Exists(LocalBinaryPath))
         {
-            SetStatus(YtDlpStatus.Checking);
+            SetStatus(ToolStatus.Checking);
             if (await IsUpToDateAsync(ct))
             {
                 _logger.LogInformation("yt-dlp is up to date");
                 _resolvedPath = LocalBinaryPath;
-                SetStatus(YtDlpStatus.Present);
+                SetStatus(ToolStatus.Present);
                 return _resolvedPath;
             }
 
@@ -122,7 +125,7 @@ public sealed class YtDlpProvider
         try
         {
             Directory.CreateDirectory(DataDir);
-            SetStatus(YtDlpStatus.Downloading);
+            SetStatus(ToolStatus.Downloading);
 
             using var http = new HttpClient();
             http.DefaultRequestHeaders.UserAgent.ParseAdd("YtmUrlSharp/1.0");
@@ -152,20 +155,20 @@ public sealed class YtDlpProvider
 
             _logger.LogInformation("yt-dlp downloaded to {Path}", LocalBinaryPath);
             _resolvedPath = LocalBinaryPath;
-            SetStatus(YtDlpStatus.Downloaded);
+            SetStatus(ToolStatus.Downloaded);
             return _resolvedPath;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogWarning("Failed to download yt-dlp: {Message}", ex.Message);
-            SetStatus(YtDlpStatus.Failed);
+            SetStatus(ToolStatus.Failed);
             // Clean up partial download
             try { File.Delete(LocalBinaryPath); } catch { }
             return null;
         }
     }
 
-    private void SetStatus(YtDlpStatus status)
+    private void SetStatus(ToolStatus status)
     {
         _state.YtDlpState = status;
         _state.NeedsRedraw = true;
